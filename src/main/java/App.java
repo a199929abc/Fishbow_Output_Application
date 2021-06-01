@@ -1,10 +1,13 @@
 import javax.swing.*;
 import java.awt.event.ActionListener;
 import java.io.*;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.util.ArrayList;
-import java.util.Locale;
 
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
@@ -15,23 +18,12 @@ import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.FileChooser;
-
-import org.apache.poi.poifs.filesystem.POIFSFileSystem;
-import org.apache.poi.ss.formula.functions.T;
-import org.apache.poi.ss.usermodel.*;
-
-import org.apache.poi.xssf.usermodel.XSSFCell;
-import org.apache.poi.xssf.usermodel.XSSFRow;
-import org.apache.poi.xssf.usermodel.XSSFSheet;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.jdom.Document;
 import org.jdom.Element;
 import org.jdom.JDOMException;
 import org.jdom.input.SAXBuilder;
 import org.xml.sax.InputSource;
 import javafx.application.Application;
-import com.sun.scenario.effect.impl.prism.PrImage;
-
 import javafx.event.EventHandler;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -59,10 +51,13 @@ public class App extends Application {
     private static SAXBuilder builder = new SAXBuilder();
     private static String hostName = "universityofvictoria.myfishbowl.com";
     private static int port = 28192;
+    long start = System.currentTimeMillis();
+
 
 
     public static void main(String[] args) {
         // Create new object of this class
+      //  long start = System.currentTimeMillis();
 
         launch();//UI
         Connection connection = new Connection(hostName, port);
@@ -95,10 +90,14 @@ public class App extends Application {
         // Login successful, store the key
         ticketKey = root.getChild("Ticket").getChild("Key").getValue();
         Element node = null;
-
+        long start = System.currentTimeMillis();
 
         write_to_Excel(connection,response);//run write excel code
         App.infoBox("Process Completed ! ","successful");
+        long end = System.currentTimeMillis();
+        NumberFormat formatter = new DecimalFormat("#0.00000");
+        System.out.print("Execution time is " + formatter.format((end - start) / 1000d/60) + " mins");
+
         System.exit(1);
 
     }
@@ -285,13 +284,17 @@ public class App extends Application {
 
             int max_row = reader.maxRow();
 
-            // int title =reader.getMapTitle("Serial #");get mapping title
-            excelWriter ew = new excelWriter(path, "name");
-            //Writing Header to the sheet
-            ew.write_header();
             int count=0;
-      try{
-          ArrayList collect=new ArrayList();
+
+            List<Object> exportData = new ArrayList<Object>();
+            exportData.add("Part Title");
+            exportData.add("MTC Number");
+            exportData.add("DI SN");
+            exportData.add("Data");
+
+            List<List<Object>> datalist = new ArrayList<List<Object>>();
+            try{
+            ArrayList collect=new ArrayList();
           for (int i = 1; i < max_row; i++) {
               System.out.println(i);
               count=i+1;
@@ -304,25 +307,44 @@ public class App extends Application {
             BigInteger partid = new BigDecimal(collect.get(2).toString()).toBigInteger();
             // get Part XML format
             String getPart = Requests.get_part(partid);
+            System.out.println(partid);
             // connect to API and get response back
             response = connection.sendRequest(getPart);
             // get Description String
             String result = getDescription(response).replaceAll(",","");
+            String DIpattern = "(?<=DI:)((\\s\\w.*?\\s)|(\\w.*?\\s)|(\\s\\w.*))";
+            Pattern DIr = Pattern.compile(DIpattern);
+            Matcher DIm = DIr.matcher(result);
+            String SNpattern = "(?<=SN:)((\\s\\w.*?\\s)|(\\w.*?\\s)|(\\s\\w.*))";
+            Pattern SNr = Pattern.compile(SNpattern);
+            Matcher SNm = SNr.matcher(result);
 
-            if(result.indexOf("DI:")!=-1){
 
-                String temp = result.substring(result.indexOf("DI:") + 4);
-                //System.out.println(temp);
-                ArrayList<String> rowFill = new ArrayList<String>();
+              List<Object> data=new ArrayList<Object>();
 
-                rowFill.add(temp.substring(0, temp.indexOf("")));
-                rowFill.add(temp);
-                System.out.println(temp);
-                System.out.println("??????????????"+temp.substring(0, temp.indexOf("")));
-                ew.write_row(rowFill, i);
-            }
 
-            }
+
+              if(DIm.find()==true){
+                    String DIname =result.replace("DI:","");
+                    data.add(DIname.replace(DIm.group(),""));
+                    data.add(partid);
+                    System.out.println(DIm.group());
+                    data.add("DI:");
+                    data.add(DIm.group());
+                }else if(SNm.find()==true){
+                  String SNname =result.replace("SN:","");
+                  data.add(SNname.replace(SNm.group(),""));
+                    System.out.println(SNm.group());
+                    data.add(partid);
+                    data.add("SN:");
+                    data.add(SNm.group());
+              }else{
+                  data.add(result);
+                  data.add(partid);
+              }
+              datalist.add(data);
+
+                    }
 
 
 
@@ -332,12 +354,16 @@ public class App extends Application {
           App.infoBox(String.format("ERROR: Please check row number %s then retry",count),"Error");
           e.printStackTrace();
           System.exit(1);
-      }
-            String outpath=System.getProperty("user.home");
-            String output_path =String.format("%s\\out_%s",outpath,fileName);
-            System.out.println(output_path);
 
-            ew.create_excel(output_path);//Write to excel
+      }
+
+            String path = System.getProperty("user.home");
+            File file = UtilsCSV.createCSVFile(exportData, datalist, path, fileName);
+            String fileName2 = file.getName();
+            System.out.println("File Name is : " + fileName2);
+
+
+
         }catch (IOException e){
             e.printStackTrace();
         }
