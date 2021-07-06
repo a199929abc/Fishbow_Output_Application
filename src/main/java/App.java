@@ -9,6 +9,7 @@ import java.util.regex.Pattern;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 
+import org.json.*;
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.scene.control.PasswordField;
@@ -16,12 +17,13 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
-import javafx.scene.text.FontWeight;
 import javafx.stage.FileChooser;
 import org.jdom.Document;
 import org.jdom.Element;
 import org.jdom.JDOMException;
 import org.jdom.input.SAXBuilder;
+import org.json.JSONObject;
+import org.json.XML;
 import org.xml.sax.InputSource;
 import javafx.application.Application;
 import javafx.event.EventHandler;
@@ -35,11 +37,14 @@ import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.text.Text;
 import javafx.stage.Stage;
+import pojo.Bowl;
+
 import  java.lang.Class.*;
 import java.time.format.DateTimeFormatter;
 import java.time.LocalDateTime;
 
 public class App extends Application {
+
     public static String fileName;
     public static String userName;// username
     public static String passWord;// password
@@ -52,6 +57,7 @@ public class App extends Application {
     private static String hostName = "universityofvictoria.myfishbowl.com";
     private static int port = 28192;
     long start = System.currentTimeMillis();
+    public static int PRETTY_PRINT_INDENT_FACTOR = 4;
 
 
 
@@ -97,7 +103,7 @@ public class App extends Application {
         long end = System.currentTimeMillis();
         NumberFormat formatter = new DecimalFormat("#0.00000");
         System.out.print("Execution time is " + formatter.format((end - start) / 1000d/60) + " mins");
-
+        connection.disconnect();
         System.exit(1);
 
     }
@@ -278,6 +284,7 @@ public class App extends Application {
     public static void write_to_Excel(Connection connection,String response){
         try {
             //创建工作簿
+
             FileInputStream is = new FileInputStream(App.path);
             excelReader reader = new excelReader(is);
             reader.read(is);
@@ -285,22 +292,22 @@ public class App extends Application {
             int max_row = reader.maxRow();
 
             int count=0;
-
-            List<Object> exportData = new ArrayList<Object>();
-            exportData.add("Part Title");
-            exportData.add("MTC Number");
-            exportData.add("DI SN");
-            exportData.add("Data");
-
-            List<List<Object>> datalist = new ArrayList<List<Object>>();
+            excelWriter ew = new excelWriter(path, "name");
+            //Writing Header to the sheet
+            ew.write_header();
+            //export data format
             try{
             ArrayList collect=new ArrayList();
+
+            int rowNum=1;
           for (int i = 1; i < max_row; i++) {
-              System.out.println(i);
+
+              System.out.println("****************************************************************");
+              Thread.sleep(500);
               count=i+1;
               collect= reader.processRow(i);
               if (collect.get(0) == null && collect.get(1) == null && collect.get(2) == null) {
-                  System.out.println("Process have completed！");
+
                   break;
               }
           if (collect.get(2) != null) {
@@ -310,7 +317,54 @@ public class App extends Application {
             System.out.println(partid);
             // connect to API and get response back
             response = connection.sendRequest(getPart);
+            Bowl bowl = new Bowl();
+            JSONObject xmlJSONObj = XML.toJSONObject(response);
+            String jsonPrettyPrintString = xmlJSONObj.toString(PRETTY_PRINT_INDENT_FACTOR);
+            //System.out.println(jsonPrettyPrintString);
+
+            bowl.setABCCode(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs").
+                    getJSONObject("PartQueryRs").getJSONObject("Part").getString("ABCCode"));
+
+            bowl.setHeight(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs").
+                    getJSONObject("PartQueryRs").getJSONObject("Part").getInt("Height"));
+
+            bowl.setStandardCost(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs").
+                    getJSONObject("PartQueryRs").getJSONObject("Part").getDouble("StandardCost"));
+
+            bowl.setWidth(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs").
+                    getJSONObject("PartQueryRs").getJSONObject("Part").getDouble("Width"));
+
+            bowl.setDetails(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs").
+                    getJSONObject("PartQueryRs").getJSONObject("Part").getString("Details"));
+
+            bowl.setPartID(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs").
+                    getJSONObject("PartQueryRs").getJSONObject("Part").getInt("PartID"));
+
+            bowl.setLen(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs").
+                    getJSONObject("PartQueryRs").getJSONObject("Part").getDouble("Len"));
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+              try{
+
+                 // System.out.println(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs").getJSONObject("PartQueryRs")
+                   //       .getJSONArray("tag").getJSONObject(0).getInt( "Quantity"));
+
+                  bowl.setTag(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs")
+                          .getJSONObject("PartQueryRs").getJSONArray("Tag"));
+                  //System.out.println("Tag is an array with length : "+ bowl.getTag().length());
+                  bowl.setArrayFlag(0);
+
+              }catch (Exception e){
+                  bowl.setArrayFlag(1);
+                  bowl.setSingleTag(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs")
+                          .getJSONObject("PartQueryRs").getJSONObject("Tag"));
+                  //System.out.print("Tag is not an array");
+              }
+
+           // System.out.println(xmlJSONObj.getJSONObject());
+              //System.out.println("Flag : "+bowl.getArrayFlag());
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             // get Description String
+
             String result = getDescription(response).replaceAll(",","");
             String DIpattern = "(?<=DI:)((\\s\\w.*?\\s)|(\\w.*?\\s)|(\\s\\w.*))";
             Pattern DIr = Pattern.compile(DIpattern);
@@ -319,35 +373,335 @@ public class App extends Application {
             Pattern SNr = Pattern.compile(SNpattern);
             Matcher SNm = SNr.matcher(result);
 
+            Boolean SNt = SNm.find();
+            Boolean DIt = DIm.find();
 
-              List<Object> data=new ArrayList<Object>();
+            if (DIt != true && i<=154 && i>=1903) {
+                continue;
+            }
+
+            if(DIt!= true){
+                continue;
+            }
+            System.out.println(result);
+
+            List<Object> data =new ArrayList<Object>();
+
+            ArrayList rowFill = new ArrayList();
+
+            if(bowl.getArrayFlag()==1){
+
+                System.out.println("- - - - Single Location - - - -");
+
+                if( DIt==true && SNt==true){
+
+                    String DImatchGroup = DIm.group();
+                    String SNmatchGroup= SNm.group();
+
+                    System.out.println("1111111111111111");
+
+                    String name = result.replace("DI:","");
+                    name = name.replace("SN:","");
+                    name = name.replace(DImatchGroup,"");
+                    name = name .replace(SNmatchGroup,"");
+                    rowFill.add(name);
+                    rowFill.add(SNmatchGroup);
+                    rowFill.add(DImatchGroup);
+                    rowFill.add(partid.toString());
+                    //rowFill.add(bowl.getABCCode());
+                    rowFill.add("$"+bowl.getStandardCost());
+                    // rowFill.add(bowl.getLen());
+                   //  rowFill.add(bowl.getHeight());
+                   // rowFill.add(bowl.getWidth());
+                    // rowFill.add(bowl.getPartID());
 
 
+                    rowFill.add(bowl.getSingleTag().getInt("Quantity"));
+                    //location
+                    rowFill.add(bowl.getSingleTag().getJSONObject("Location")
+                            .getString("LocationGroupName")
+                            + ": "
+                            +bowl.getSingleTag().getJSONObject("Location")
+                            .getString("Name"));
+                    //rowFill.add(bowl.getSingleTag().getJSONObject("Location")
+                            //.getString("Name"));
+                    rowFill.add(bowl.getSingleTag().getJSONObject("Location")
+                            .getString("Description"));
+                    rowFill.add(bowl.getDetails());
+                    rowFill.add(result);
 
-              if(DIm.find()==true){
-                    String DIname =result.replace("DI:","");
-                    data.add(DIname.replace(DIm.group(),""));
-                    data.add(partid);
-                    System.out.println(DIm.group());
-                    data.add("DI:");
-                    data.add(DIm.group());
-                }else if(SNm.find()==true){
-                  String SNname =result.replace("SN:","");
-                  data.add(SNname.replace(SNm.group(),""));
-                    System.out.println(SNm.group());
-                    data.add(partid);
-                    data.add("SN:");
-                    data.add(SNm.group());
-              }else{
-                  data.add(result);
-                  data.add(partid);
-              }
-              datalist.add(data);
+                    ew.write_row(rowFill,rowNum);
+                    rowNum++;
+
+                }
+                else if(SNt==true && DIt!=true){
+
+                    String SNmatchGroup= SNm.group();
+
+                    System.out.println("222222222222");
+                    String name = result.replace("SN:","");
+                    name = name.replace(SNmatchGroup,"");
+                    rowFill.add(name);
+                    rowFill.add(SNmatchGroup);
+                    rowFill.add("");
+                    rowFill.add(partid.toString());
+                    // rowFill.add(bowl.getABCCode());
+                    rowFill.add("$"+bowl.getStandardCost());
+                    // rowFill.add(bowl.getLen());
+                   //  rowFill.add(bowl.getHeight());
+                   // rowFill.add(bowl.getWidth());
+                    // rowFill.add(bowl.getPartID());
+
+                    rowFill.add(bowl.getSingleTag().getInt("Quantity"));
+                    //location
+                    rowFill.add(bowl.getSingleTag().getJSONObject("Location")
+                            .getString("LocationGroupName")  + ": "
+                            +bowl.getSingleTag().getJSONObject("Location")
+                            .getString("Name"));
+                    //rowFill.add(bowl.getSingleTag().getJSONObject("Location").getString("Name"));
+                    rowFill.add(bowl.getSingleTag().getJSONObject("Location")
+                    .getString("Description"));
+                    rowFill.add(bowl.getDetails());
+
+                    rowFill.add(result);
+
+                    ew.write_row(rowFill,rowNum);
+                    rowNum++;
+                }
+                else if(SNt!=true && DIt==true){
+
+                    String DImatchGroup = DIm.group();
+
+
+                    System.out.println("33333333333333");
+                    String name = result.replace("DI:","");
+
+                    name = name.replace(DImatchGroup,"");
+                    System.out.println(DImatchGroup+"fuck you");
+                    rowFill.add(name);
+                    rowFill.add("");
+                    rowFill.add(DImatchGroup);
+                    rowFill.add(partid.toString());
+                    // rowFill.add(bowl.getABCCode());
+                    rowFill.add("$"+bowl.getStandardCost());
+                    // rowFill.add(bowl.getLen());
+                   //  rowFill.add(bowl.getHeight());
+                   // rowFill.add(bowl.getWidth());
+                    // rowFill.add(bowl.getPartID());
+
+
+                    rowFill.add(bowl.getSingleTag().getInt("Quantity"));
+
+                    //location
+                    rowFill.add(bowl.getSingleTag().getJSONObject("Location")
+                            .getString("LocationGroupName")  + ": "
+                            +bowl.getSingleTag().getJSONObject("Location")
+                            .getString("Name"));
+                   // rowFill.add(bowl.getSingleTag().getJSONObject("Location").getString("Name"));
+                    rowFill.add(bowl.getSingleTag().getJSONObject("Location")
+                            .getString("Description"));
+                    rowFill.add(bowl.getDetails());
+
+                    rowFill.add(result);
+
+                    ew.write_row(rowFill,rowNum);
+                    rowNum++;
+
+                }
+                else {
+                    System.out.println("4444444444444444");
+                    rowFill.add(result);
+                    rowFill.add("");
+                    rowFill.add("");
+                    rowFill.add(partid.toString());
+                    // rowFill.add(bowl.getABCCode());
+                    rowFill.add("$"+bowl.getStandardCost());
+                    // // rowFill.add(bowl.getLen());
+                   //  rowFill.add(bowl.getHeight());
+                   // rowFill.add(bowl.getWidth());
+                    // rowFill.add(bowl.getPartID());
+
+                    rowFill.add(bowl.getSingleTag().getInt("Quantity"));
+
+                    //location
+                    rowFill.add(bowl.getSingleTag().getJSONObject("Location")
+                            .getString("LocationGroupName")  + ": "
+                            +bowl.getSingleTag().getJSONObject("Location")
+                            .getString("Name"));
+                    //rowFill.add(bowl.getSingleTag().getJSONObject("Location").getString("Name"));
+                    rowFill.add(bowl.getSingleTag().getJSONObject("Location")
+                            .getString("Description"));
+
+                    rowFill.add(bowl.getDetails());
+
+                    rowFill.add(result);
+                    ew.write_row(rowFill,rowNum);
+                    rowNum++;
+                }
+
+            }
+            else {
+                JSONObject tagTemp = new JSONObject();
+
+                for(int k=0; k< bowl.getTag().length(); k++){
+                    tagTemp = bowl.getTag().getJSONObject(k);
+                    //System.out.println("TAG quantity : "+tagTemp.getInt("Quantity"));
+                    rowFill = new ArrayList();
+
+                    if( DIt == true && SNt == true ){
+                        //System.out.println(rowNum+"   ...............................");
+
+                        String DImatchGroup = DIm.group();
+                        String SNmatchGroup= SNm.group();
+
+                        System.out.println("5555555555555555");
+                        String name = result.replace("DI:","");
+                        name = name.replace("SN:","");
+                        name = name.replace(DImatchGroup,"");
+                        name = name .replace(SNmatchGroup,"");
+                        rowFill.add(name);
+                        rowFill.add(SNmatchGroup);
+                        rowFill.add(DImatchGroup);
+                        rowFill.add(partid.toString());
+                        // rowFill.add(bowl.getABCCode());
+                        rowFill.add("$"+bowl.getStandardCost());
+                        // rowFill.add(bowl.getLen());
+                        // rowFill.add(bowl.getHeight());
+                        // rowFill.add(bowl.getWidth());
+                        // rowFill.add(bowl.getPartID());
+
+
+                        //quantity
+                        rowFill.add(tagTemp.getInt("Quantity"));
+                        rowFill.add(tagTemp.getJSONObject("Location")
+                                .getString("LocationGroupName")  + ": "
+                                +tagTemp.getJSONObject("Location").getString("Name"));
+                        //rowFill.add(tagTemp.getJSONObject("Location").getString("Name"));
+                        rowFill.add(tagTemp.getJSONObject("Location")
+                                .getString("Description"));
+
+                        rowFill.add(bowl.getDetails());
+
+                        rowFill.add(result);
+                        ew.write_row(rowFill,rowNum);
+                        rowNum++;
+
+                    }
+                    else if(SNt==true && DIt!=true){
+
+                        String SNmatchGroup= SNm.group();
+                        //System.out.println(rowNum+"   ...............................");
+                        System.out.println("66666666666666");
+                        String name = result.replace("SN:","");
+                        name = name .replace(SNmatchGroup,"");
+
+                        rowFill.add(name);
+                        rowFill.add(SNmatchGroup);
+                        rowFill.add("");
+                        rowFill.add(partid.toString());
+                        // rowFill.add(bowl.getABCCode());
+                        rowFill.add("$"+bowl.getStandardCost());
+                        // rowFill.add(bowl.getLen());
+                        //  rowFill.add(bowl.getHeight());
+                        // rowFill.add(bowl.getWidth());
+                        // rowFill.add(bowl.getPartID());
+
+                        //quantity
+                        rowFill.add(tagTemp.getInt("Quantity"));
+                        rowFill.add(tagTemp.getJSONObject("Location")
+                                .getString("LocationGroupName")  + ": "
+                                +tagTemp.getJSONObject("Location").getString("Name"));
+                        //rowFill.add(tagTemp.getJSONObject("Location").getString("Name"));
+                        rowFill.add(tagTemp.getJSONObject("Location")
+                                .getString("Description"));
+
+                        rowFill.add(bowl.getDetails());
+
+                        rowFill.add(result);
+
+                        ew.write_row(rowFill,rowNum);
+                        rowNum++;
 
                     }
 
+                    else if(SNt!= true && DIt== true){
+
+                        String DImatchGroup = DIm.group();
+
+                        System.out.println("77777777777777777");
+                        String name = result.replace("DI:","");
+                        //System.out.println(rowNum+"   ...............................");
+
+                        name = name.replace(DImatchGroup,"");
+
+                        rowFill.add(name);
+                        rowFill.add("");
+                        rowFill.add(DImatchGroup);
+                        rowFill.add(partid.toString());
+                        // rowFill.add(bowl.getABCCode());
+                        rowFill.add("$"+bowl.getStandardCost());
+                        // rowFill.add(bowl.getLen());
+                        // rowFill.add(bowl.getHeight());
+                        // rowFill.add(bowl.getWidth());
+                        // rowFill.add(bowl.getPartID());
 
 
+                        //quantity
+                        rowFill.add(tagTemp.getInt("Quantity"));
+                        rowFill.add(tagTemp.getJSONObject("Location")
+                                .getString("LocationGroupName")  + ": "
+                                +tagTemp.getJSONObject("Location").getString("Name"));
+                        //rowFill.add(tagTemp.getJSONObject("Location").getString("Name"));
+                        rowFill.add(tagTemp.getJSONObject("Location")
+                                .getString("Description"));
+
+                        rowFill.add(bowl.getDetails());
+
+                        rowFill.add(result);
+                        ew.write_row(rowFill,rowNum);
+
+                        rowNum++;
+
+
+                    }
+                    else {
+
+                        //System.out.println(rowNum+"   ...............................");
+                        System.out.println("888888888888888888");
+                        rowFill.add(result);
+                        rowFill.add("");
+                        rowFill.add("");
+                        rowFill.add(partid.toString());
+                        // rowFill.add(bowl.getABCCode());
+                        rowFill.add("$"+bowl.getStandardCost());
+                        // rowFill.add(bowl.getLen());
+                       //  rowFill.add(bowl.getHeight());
+                       // rowFill.add(bowl.getWidth());
+                        // rowFill.add(bowl.getPartID());
+
+
+                        //quantity
+                        rowFill.add(tagTemp.getInt("Quantity"));
+                        rowFill.add(tagTemp.getJSONObject("Location")
+                                .getString("LocationGroupName")  + ": "
+                                +tagTemp.getJSONObject("Location").getString("Name"));
+                       // rowFill.add(tagTemp.getJSONObject("Location").getString("Name"));
+                        rowFill.add(tagTemp.getJSONObject("Location")
+                                .getString("Description"));
+
+                        rowFill.add(bowl.getDetails());
+
+
+                        rowFill.add(result);
+
+                        ew.write_row(rowFill,rowNum);
+                        rowNum++;
+                    }
+
+
+                }
+            }
+                    }
                 }
               //end of for
       } catch (Exception e){
@@ -357,16 +711,234 @@ public class App extends Application {
 
       }
 
-            String path = System.getProperty("user.home");
-            File file = UtilsCSV.createCSVFile(exportData, datalist, path, fileName);
-            String fileName2 = file.getName();
-            System.out.println("File Name is : " + fileName2);
+            String outpath=System.getProperty("user.home");
+            String output_path =String.format("%s\\out_%s",outpath,fileName);
+            System.out.println(output_path);
+
+            ew.create_excel(output_path);//Write to excel
+
+
+
+        }catch (IOException e){
+            connection.disconnect();
+            e.printStackTrace();
+        }
+    }
+
+    public void writeRow(String name,String DImatchGroup, String SNmatchGroup, Bowl bowl){
+
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    /** public static void write_to_Excel_withoutTag(Connection connection,String response){
+        try {
+            //创建工作簿
+            FileInputStream is = new FileInputStream(App.path);
+            excelReader reader = new excelReader(is);
+            reader.read(is);
+
+            int max_row = reader.maxRow();
+
+            int count=0;
+            excelWriter ew = new excelWriter(path, "name");
+            //Writing Header to the sheet
+            ew.write_header();
+            //export data format
+            try{
+                ArrayList collect=new ArrayList();
+                for (int i = 1; i < max_row; i++) {
+                    System.out.println(i);
+                    count=i+1;
+                    collect= reader.processRow(i);
+                    if (collect.get(0) == null && collect.get(1) == null && collect.get(2) == null) {
+                        System.out.println("Process have completed！");
+                        break;
+                    }
+                    if (collect.get(2) != null) {
+                        BigInteger partid = new BigDecimal(collect.get(2).toString()).toBigInteger();
+                        // get Part XML format
+                        String getPart = Requests.get_part(partid);
+                        System.out.println(partid);
+                        // connect to API and get response back
+                        response = connection.sendRequest(getPart);
+                        Bowl bowl = new Bowl();
+                        JSONObject xmlJSONObj = XML.toJSONObject(response);
+                        String jsonPrettyPrintString = xmlJSONObj.toString(PRETTY_PRINT_INDENT_FACTOR);
+                        System.out.println(jsonPrettyPrintString);
+
+                        bowl.setABCCode(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs").
+                                getJSONObject("PartQueryRs").getJSONObject("Part").getString("ABCCode"));
+
+                        bowl.setHeight(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs").
+                                getJSONObject("PartQueryRs").getJSONObject("Part").getInt("Height"));
+
+                        bowl.setStandardCost(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs").
+                                getJSONObject("PartQueryRs").getJSONObject("Part").getDouble("StandardCost"));
+
+                        bowl.setWidth(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs").
+                                getJSONObject("PartQueryRs").getJSONObject("Part").getDouble("Width"));
+
+                        bowl.setDetails(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs").
+                                getJSONObject("PartQueryRs").getJSONObject("Part").getString("Details"));
+
+                        bowl.setPartID(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs").
+                                getJSONObject("PartQueryRs").getJSONObject("Part").getInt("PartID"));
+
+                        bowl.setLen(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs").
+                                getJSONObject("PartQueryRs").getJSONObject("Part").getDouble("Len"));
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                        try{
+
+
+                            // System.out.println(xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs").getJSONObject("PartQueryRs")
+                            //       .getJSONArray("tag").getJSONObject(0).getInt( "Quantity"));
+
+                            JSONArray array= xmlJSONObj.getJSONObject("FbiXml").getJSONObject("FbiMsgsRs")
+                                    .getJSONObject("PartQueryRs").getJSONArray("Tag");
+                            System.out.println("Tag is an array with length : "+array.length());
+                            for (int j =0; j< array.length(); j++){
+
+                                JSONObject tagTemp = array.getJSONObject(j);
+                                System.out.println("TAG quantity : "+tagTemp.getInt("Quantity"));
+                            }
+                        }catch (Exception e){
+                            System.out.print("Tag is not an array");
+                        }
+
+                        // System.out.println(xmlJSONObj.getJSONObject());
+
+
+//!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                        // get Description String
+
+                        String result = getDescription(response).replaceAll(",","");
+                        String DIpattern = "(?<=DI:)((\\s\\w.*?\\s)|(\\w.*?\\s)|(\\s\\w.*))";
+                        Pattern DIr = Pattern.compile(DIpattern);
+                        Matcher DIm = DIr.matcher(result);
+                        String SNpattern = "(?<=SN:)((\\s\\w.*?\\s)|(\\w.*?\\s)|(\\s\\w.*))";
+                        Pattern SNr = Pattern.compile(SNpattern);
+                        Matcher SNm = SNr.matcher(result);
+
+
+                        List<Object> data=new ArrayList<Object>();
+
+                        ArrayList rowFill = new ArrayList();
+
+
+                        if(DIm.find()==true&&SNm.find()==true){
+                            String name = result.replace("DI:","");
+                            name = name.replace("SN:","");
+                            name = name.replace(DImatchGroup,"");
+                            name = name .replace(SNmatchGroup,"");
+                            rowFill.add(name);
+                            rowFill.add(SNmatchGroup);
+                            rowFill.add(DImatchGroup);
+                            rowFill.add(partid.toString());
+                            // rowFill.add(bowl.getABCCode());
+                            rowFill.add(bowl.getStandardCost()+"$");
+                            // rowFill.add(bowl.getLen());
+                           //  rowFill.add(bowl.getHeight());
+                           // rowFill.add(bowl.getWidth());
+                            // rowFill.add(bowl.getPartID());
+                            rowFill.add(bowl.getDetails());
+
+
+                            ew.write_row(rowFill,i);
+
+                        }else if(SNm.find()==true && DIm.find()!=true){
+                            String name = result.replace("SN:","");
+                            name = name .replace(SNmatchGroup,"");
+
+                            rowFill.add(name);
+                            rowFill.add(SNmatchGroup);
+                            rowFill.add("");
+                            rowFill.add(partid.toString());
+                            // rowFill.add(bowl.getABCCode());
+                            rowFill.add(bowl.getStandardCost()+"$");
+                            // rowFill.add(bowl.getLen());
+                           //  rowFill.add(bowl.getHeight());
+                           // rowFill.add(bowl.getWidth());
+                            // rowFill.add(bowl.getPartID());
+                            rowFill.add(bowl.getDetails());
+
+
+                            ew.write_row(rowFill,i);
+                        }else if(SNm.find()!= true && DIm.find()== true){
+                            String name = result.replace("DI:","");
+
+                            name = name.replace(DImatchGroup,"");
+
+                            rowFill.add(name);
+                            rowFill.add("");
+                            rowFill.add(DImatchGroup);
+                            rowFill.add(partid.toString());
+                            // rowFill.add(bowl.getABCCode());
+                            rowFill.add(bowl.getStandardCost()+"$");
+                            // rowFill.add(bowl.getLen());
+                           //  rowFill.add(bowl.getHeight());
+                           // rowFill.add(bowl.getWidth());
+                            // rowFill.add(bowl.getPartID());
+                            rowFill.add(bowl.getDetails());
+
+
+
+                        }
+                        else {
+                            rowFill.add(result);
+                            rowFill.add("");
+                            rowFill.add("");
+                            rowFill.add(partid.toString());
+                            // rowFill.add(bowl.getABCCode());
+                            rowFill.add(bowl.getStandardCost()+"$");
+                            // rowFill.add(bowl.getLen());
+                           //  rowFill.add(bowl.getHeight());
+                           // rowFill.add(bowl.getWidth());
+                            // rowFill.add(bowl.getPartID());
+                            rowFill.add(bowl.getDetails());
+
+                            ew.write_row(rowFill,i);
+                        }
+
+                    }
+
+
+
+                }
+                //end of for
+            } catch (Exception e){
+                App.infoBox(String.format("ERROR: Please check row number %s then retry",count),"Error");
+                e.printStackTrace();
+                System.exit(1);
+
+            }
+
+            String outpath=System.getProperty("user.home");
+            String output_path =String.format("%s\\out_%s",outpath,fileName);
+            System.out.println(output_path);
+
+            ew.create_excel(output_path);//Write to excel
 
 
 
         }catch (IOException e){
             e.printStackTrace();
         }
-    }
-}
+    }**/
+
+
 

@@ -40,11 +40,11 @@ public class excelWriter {
      * @param rowNum
      */
 
-    public void write_row(ArrayList<String> writeStrings, int rowNum) {
+    public void write_row(ArrayList writeStrings, int rowNum) {
         XSSFRow row = this.sheet.createRow(rowNum);
         for (int i = 0; i < writeStrings.size(); i++) {
             XSSFCell cell = row.createCell(i);
-            cell.setCellValue(writeStrings.get(i));
+            cell.setCellValue( writeStrings.get(i).toString());
         }
 
     }
@@ -72,21 +72,30 @@ public class excelWriter {
      */
     public void write_header(){
         this.header.add("Instrument");
-        this.header.add("Serial #");
-        this.header.add("Device #");
-        this.header.add("Inventory #");
-        this.header.add("Components");
-        this.header.add(" ");
-        this.header.add("Work Ticket");
-        this.header.add("Linked to");
-        this.header.add("Description");
+        this.header.add("Serial Number");
+        this.header.add("Device Id");
+        this.header.add("Inventory Number");
+        //this.header.add("ABCCode");
+        this.header.add("StandardCost");
+        // this.header.add("Len");
+        // this.header.add("Height");
+        // this.header.add("Width");
+        // this.header.add("PartID");
+
+        this.header.add("Quantity");
+        //this.header.add("LocationGroupName");
+        this.header.add("location");//name
+        this.header.add(("location Description"));
+        this.header.add("Details");
+
         XSSFRow row = this.sheet.createRow(0);
         for (int i = 0; i < this.header.size(); i++) {
             XSSFCell cell = row.createCell(i);
             cell.setCellValue(this.header.get(i));
         }
         //combine column E and Column F
-        this.sheet.addMergedRegion(new CellRangeAddress(0,0,4,5));
+        //this.sheet.addMergedRegion(new CellRangeAddress(0,0,4,5));
+        //合并两个单元格
 
     }
 }
